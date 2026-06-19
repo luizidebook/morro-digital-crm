@@ -6,6 +6,7 @@ import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
+import { followupCheckHandler, trialExpiryHandler } from "../scheduledHandlers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 
@@ -36,6 +37,10 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   registerStorageProxy(app);
   registerOAuthRoutes(app);
+  // Scheduled task handlers (must be before Vite/static fallthrough)
+  app.post("/api/scheduled/followup-check", followupCheckHandler);
+  app.post("/api/scheduled/trial-expiry", trialExpiryHandler);
+
   // tRPC API
   app.use(
     "/api/trpc",
