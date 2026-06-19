@@ -30,8 +30,8 @@
 - [x] Handler `/api/scheduled/trial-expiry` — notifica vencimento de trials
 - [x] Integração LLM para geração de mensagens personalizadas por perfil e etapa
 - [x] Configuração de intervalos de follow-up pelo usuário
-- [ ] Heartbeat cron para follow-up automático (requer deploy — criar após publicar)
-- [ ] Heartbeat cron para verificação de trials (requer deploy — criar após publicar)
+- [ ] Heartbeat cron para follow-up automático (aguardando deploy do projeto para criar)
+- [ ] Heartbeat cron para verificação de trials (aguardando deploy do projeto para criar)
 
 ## Fase 4: Frontend — Layout e Design System
 - [x] Configurar paleta de cores elegante (tons escuros + dourado/âmbar)
