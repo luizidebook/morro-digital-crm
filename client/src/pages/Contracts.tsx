@@ -8,11 +8,17 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
-import { formatCurrency, formatDate } from "@/lib/crm";
-import { CheckCircle2, FileSignature, Plus } from "lucide-react";
+import { formatCurrency, formatDate, getWhatsAppLink } from "@/lib/crm";
+import { CheckCircle2, Copy, ExternalLink, FileSignature, MessageSquare, Plus } from "lucide-react";
 import { useState } from "react";
 import { useSearch } from "wouter";
 import { toast } from "sonner";
+
+const getAbsoluteContractUrl = (url?: string) => {
+  if (!url) return "";
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  return `${window.location.origin}${url.startsWith("/") ? url : `/${url}`}`;
+};
 
 export default function Contracts() {
   const search = useSearch();
@@ -73,10 +79,15 @@ Morro de São Paulo, [DATA].`,
     const map: Record<string, string> = {
       draft: "bg-slate-800 text-slate-300 border-slate-700",
       sent: "bg-blue-950 text-blue-300 border-blue-800",
+      waiting_signature: "bg-amber-950 text-amber-300 border-amber-800",
+      viewed: "bg-orange-950 text-orange-300 border-orange-800",
       signed: "bg-emerald-950 text-emerald-300 border-emerald-800",
+      rejected: "bg-red-950 text-red-300 border-red-800",
       cancelled: "bg-red-950 text-red-300 border-red-800",
+      expired: "bg-zinc-900 text-zinc-400 border-zinc-700",
+      error: "bg-red-950 text-red-300 border-red-800",
     };
-    const labels: Record<string, string> = { draft: "Rascunho", sent: "Enviado", signed: "Assinado", cancelled: "Cancelado" };
+    const labels: Record<string, string> = { draft: "Rascunho", sent: "Enviado", waiting_signature: "Aguardando Assinatura", viewed: "Visualizado", signed: "Assinado", rejected: "Recusado", cancelled: "Cancelado", expired: "Expirado", error: "Erro" };
     return <Badge className={`text-[10px] border px-2 py-0.5 ${map[status] || "bg-muted"}`}>{labels[status] || status}</Badge>;
   };
 
@@ -120,11 +131,37 @@ Morro de São Paulo, [DATA].`,
                     </div>
                     <div className="flex flex-col items-end gap-2">
                       {getStatusBadge(contract.status)}
+                      {contract.signingUrl && contract.status !== "signed" && (
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => { navigator.clipboard.writeText(getAbsoluteContractUrl(contract.signingUrl)); toast.success("Link copiado!"); }}
+                            className="p-1.5 rounded-md hover:bg-accent text-muted-foreground transition-colors" title="Copiar link"
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={() => window.open(getAbsoluteContractUrl(contract.signingUrl), "_blank")}
+                            className="p-1.5 rounded-md hover:bg-accent text-muted-foreground transition-colors" title="Visualizar contrato"
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              const lead = (leads as any[]).find((l) => l.id === contract.leadId);
+                              const message = `Olá, ${lead?.contactName || "tudo bem"}! Tudo bem?\n\nConforme conversamos, segue o link para finalizar sua contratação como parceiro do Morro Digital:\n\n${getAbsoluteContractUrl(contract.signingUrl)}\n\nÉ só abrir pelo celular, conferir os dados e assinar digitalmente.`;
+                              window.open(getWhatsAppLink(lead?.whatsapp || lead?.phone || "", message), "_blank");
+                            }}
+                            className="p-1.5 rounded-md hover:bg-accent text-muted-foreground transition-colors" title="Enviar pelo WhatsApp"
+                          >
+                            <MessageSquare className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      )}
                       {contract.status === "draft" && (
                         <button onClick={() => sendContract.mutate({ id: contract.id, leadId: contract.leadId })}
                           className="text-xs text-blue-400 hover:text-blue-300 transition-colors">Marcar como enviado</button>
                       )}
-                      {contract.status === "sent" && (
+                      {["sent", "waiting_signature", "viewed"].includes(contract.status) && (
                         <button onClick={() => signContract.mutate({ id: contract.id, leadId: contract.leadId })}
                           className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors">Marcar como assinado</button>
                       )}
