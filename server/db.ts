@@ -3,6 +3,7 @@ import { drizzle } from "drizzle-orm/mysql2";
 import {
   ChecklistItem,
   InsertUser,
+  auditLogs,
   checklistItems,
   contracts,
   followUpSettings,
@@ -12,6 +13,7 @@ import {
   meetings,
   proposals,
   referrals,
+  signatureEvents,
   trials,
   users,
 } from "../drizzle/schema";
@@ -185,6 +187,14 @@ export async function getProposals(leadId?: number) {
   return db.select().from(proposals).orderBy(desc(proposals.createdAt));
 }
 
+
+export async function getProposalById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(proposals).where(eq(proposals.id, id)).limit(1);
+  return result[0];
+}
+
 export async function getProposalByToken(token: string) {
   const db = await getDb();
   if (!db) return undefined;
@@ -212,6 +222,23 @@ export async function getContracts(leadId?: number) {
   return db.select().from(contracts).orderBy(desc(contracts.createdAt));
 }
 
+
+export async function getContractById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(contracts).where(eq(contracts.id, id)).limit(1);
+  return result[0];
+}
+
+export async function getActiveContractByProposalId(proposalId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(contracts)
+    .where(and(eq(contracts.proposalId, proposalId), sql`${contracts.status} NOT IN ('signed', 'cancelled', 'rejected', 'expired')`))
+    .limit(1);
+  return result[0];
+}
+
 export async function getContractByToken(token: string) {
   const db = await getDb();
   if (!db) return undefined;
@@ -229,6 +256,19 @@ export async function updateContract(id: number, data: Partial<typeof contracts.
   const db = await getDb();
   if (!db) throw new Error("DB not available");
   await db.update(contracts).set(data).where(eq(contracts.id, id));
+}
+
+
+export async function createSignatureEvent(data: typeof signatureEvents.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.insert(signatureEvents).values(data);
+}
+
+export async function createAuditLog(data: typeof auditLogs.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.insert(auditLogs).values(data);
 }
 
 // ─── Interactions ─────────────────────────────────────────────────────────────
