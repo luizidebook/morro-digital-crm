@@ -15,6 +15,13 @@
       "when": 1781897485227,
       "tag": "0001_ambiguous_joshua_kane",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1783165554000,
+      "tag": "0002_contratacao_digital",
+      "breakpoints": true
     }
   ]
 }
