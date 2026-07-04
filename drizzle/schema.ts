@@ -10,7 +10,6 @@ import {
   decimal,
 } from "drizzle-orm/mysql-core";
 
-// ─── Users ────────────────────────────────────────────────────────────────────
 export const users = mysqlTable("users", {
   id: int("id").autoincrement().primaryKey(),
   openId: varchar("openId", { length: 64 }).notNull().unique(),
@@ -26,7 +25,6 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
-// ─── Leads ────────────────────────────────────────────────────────────────────
 export const leads = mysqlTable("leads", {
   id: int("id").autoincrement().primaryKey(),
   companyName: varchar("companyName", { length: 255 }).notNull(),
@@ -72,7 +70,6 @@ export const leads = mysqlTable("leads", {
 export type Lead = typeof leads.$inferSelect;
 export type InsertLead = typeof leads.$inferInsert;
 
-// ─── Checklist Items ──────────────────────────────────────────────────────────
 export const checklistItems = mysqlTable("checklist_items", {
   id: int("id").autoincrement().primaryKey(),
   leadId: int("leadId").notNull(),
@@ -104,7 +101,6 @@ export const checklistItems = mysqlTable("checklist_items", {
 export type ChecklistItem = typeof checklistItems.$inferSelect;
 export type InsertChecklistItem = typeof checklistItems.$inferInsert;
 
-// ─── Meetings ─────────────────────────────────────────────────────────────────
 export const meetings = mysqlTable("meetings", {
   id: int("id").autoincrement().primaryKey(),
   leadId: int("leadId").notNull(),
@@ -123,7 +119,6 @@ export const meetings = mysqlTable("meetings", {
 export type Meeting = typeof meetings.$inferSelect;
 export type InsertMeeting = typeof meetings.$inferInsert;
 
-// ─── Proposals ────────────────────────────────────────────────────────────────
 export const proposals = mysqlTable("proposals", {
   id: int("id").autoincrement().primaryKey(),
   leadId: int("leadId").notNull(),
@@ -148,7 +143,6 @@ export const proposals = mysqlTable("proposals", {
 export type Proposal = typeof proposals.$inferSelect;
 export type InsertProposal = typeof proposals.$inferInsert;
 
-// ─── Contracts ────────────────────────────────────────────────────────────────
 export const contracts = mysqlTable("contracts", {
   id: int("id").autoincrement().primaryKey(),
   leadId: int("leadId").notNull(),
@@ -156,9 +150,28 @@ export const contracts = mysqlTable("contracts", {
   title: varchar("title", { length: 255 }).notNull(),
   content: text("content").notNull(),
   monthlyValue: decimal("monthlyValue", { precision: 10, scale: 2 }),
-  status: mysqlEnum("status", ["draft", "sent", "signed", "cancelled"]).default("draft").notNull(),
+  status: mysqlEnum("status", [
+    "draft",
+    "sent",
+    "waiting_signature",
+    "viewed",
+    "signed",
+    "rejected",
+    "cancelled",
+    "expired",
+    "error",
+  ]).default("draft").notNull(),
   shareToken: varchar("shareToken", { length: 64 }),
+  provider: varchar("provider", { length: 50 }).default("internal").notNull(),
+  providerDocumentId: varchar("providerDocumentId", { length: 255 }),
+  providerSignerId: varchar("providerSignerId", { length: 255 }),
+  signingUrl: varchar("signingUrl", { length: 500 }),
+  signedPdfUrl: varchar("signedPdfUrl", { length: 500 }),
+  certificateUrl: varchar("certificateUrl", { length: 500 }),
+  externalSignatureStatus: varchar("externalSignatureStatus", { length: 100 }),
+  signaturePayload: json("signaturePayload"),
   sentAt: timestamp("sentAt"),
+  viewedAt: timestamp("viewedAt"),
   signedAt: timestamp("signedAt"),
   signatureData: text("signatureData"),
   createdById: int("createdById"),
@@ -169,7 +182,37 @@ export const contracts = mysqlTable("contracts", {
 export type Contract = typeof contracts.$inferSelect;
 export type InsertContract = typeof contracts.$inferInsert;
 
-// ─── Interactions (Timeline) ──────────────────────────────────────────────────
+export const signatureEvents = mysqlTable("signature_events", {
+  id: int("id").autoincrement().primaryKey(),
+  contractId: int("contractId"),
+  provider: varchar("provider", { length: 50 }).default("internal").notNull(),
+  providerEventId: varchar("providerEventId", { length: 255 }),
+  eventType: varchar("eventType", { length: 100 }).notNull(),
+  rawPayload: json("rawPayload"),
+  processed: boolean("processed").default(false).notNull(),
+  processedAt: timestamp("processedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type SignatureEvent = typeof signatureEvents.$inferSelect;
+export type InsertSignatureEvent = typeof signatureEvents.$inferInsert;
+
+export const auditLogs = mysqlTable("audit_logs", {
+  id: int("id").autoincrement().primaryKey(),
+  entityType: varchar("entityType", { length: 100 }).notNull(),
+  entityId: int("entityId").notNull(),
+  action: varchar("action", { length: 100 }).notNull(),
+  actorType: varchar("actorType", { length: 50 }),
+  actorId: int("actorId"),
+  ipAddress: varchar("ipAddress", { length: 100 }),
+  userAgent: text("userAgent"),
+  metadata: json("metadata"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type AuditLog = typeof auditLogs.$inferSelect;
+export type InsertAuditLog = typeof auditLogs.$inferInsert;
+
 export const interactions = mysqlTable("interactions", {
   id: int("id").autoincrement().primaryKey(),
   leadId: int("leadId").notNull(),
@@ -195,7 +238,6 @@ export const interactions = mysqlTable("interactions", {
 export type Interaction = typeof interactions.$inferSelect;
 export type InsertInteraction = typeof interactions.$inferInsert;
 
-// ─── Follow-up Settings ───────────────────────────────────────────────────────
 export const followUpSettings = mysqlTable("follow_up_settings", {
   id: int("id").autoincrement().primaryKey(),
   name: varchar("name", { length: 100 }).notNull(),
@@ -209,7 +251,6 @@ export const followUpSettings = mysqlTable("follow_up_settings", {
 
 export type FollowUpSetting = typeof followUpSettings.$inferSelect;
 
-// ─── Follow-ups ───────────────────────────────────────────────────────────────
 export const followUps = mysqlTable("follow_ups", {
   id: int("id").autoincrement().primaryKey(),
   leadId: int("leadId").notNull(),
@@ -227,7 +268,6 @@ export const followUps = mysqlTable("follow_ups", {
 
 export type FollowUp = typeof followUps.$inferSelect;
 
-// ─── Trials ───────────────────────────────────────────────────────────────────
 export const trials = mysqlTable("trials", {
   id: int("id").autoincrement().primaryKey(),
   leadId: int("leadId").notNull(),
@@ -244,7 +284,6 @@ export const trials = mysqlTable("trials", {
 
 export type Trial = typeof trials.$inferSelect;
 
-// ─── Referrals ────────────────────────────────────────────────────────────────
 export const referrals = mysqlTable("referrals", {
   id: int("id").autoincrement().primaryKey(),
   referrerLeadId: int("referrerLeadId").notNull(),
