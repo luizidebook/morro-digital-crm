@@ -8,11 +8,17 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
-import { formatCurrency, formatDate } from "@/lib/crm";
-import { Copy, ExternalLink, FileText, Loader2, MessageSquare, Plus, Sparkles } from "lucide-react";
+import { formatCurrency, formatDate, getWhatsAppLink } from "@/lib/crm";
+import { Copy, ExternalLink, FileSignature, FileText, Loader2, MessageSquare, Plus, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { useLocation, useSearch } from "wouter";
 import { toast } from "sonner";
+
+const getAbsoluteContractUrl = (url?: string) => {
+  if (!url) return "";
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  return `${window.location.origin}${url.startsWith("/") ? url : `/${url}`}`;
+};
 
 export default function Proposals() {
   const [, setLocation] = useLocation();
@@ -50,6 +56,17 @@ export default function Proposals() {
   const generateMessage = trpc.llm.generateProposalMessage.useMutation({
     onSuccess: (data) => { setGeneratedMsg(data.message); setGenerating(false); },
     onError: (e) => { toast.error("Erro ao gerar mensagem: " + e.message); setGenerating(false); },
+  });
+
+  const generateDigitalContract = trpc.contracts.generateDigitalFromProposal.useMutation({
+    onSuccess: (data) => {
+      toast.success(data.reused ? "Contrato digital já existia!" : "Contrato digital gerado!");
+      utils.contracts.list.invalidate();
+      if (data.signingUrl) {
+        navigator.clipboard.writeText(getAbsoluteContractUrl(data.signingUrl));
+      }
+    },
+    onError: (e) => toast.error(e.message),
   });
 
   const handleGenerate = () => {
@@ -126,17 +143,26 @@ export default function Proposals() {
                       {getStatusBadge(proposal.status)}
                       <div className="flex items-center gap-1">
                         <button
-                          onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/proposals/view/${proposal.token}`); toast.success("Link copiado!"); }}
+                          onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/proposals/view/${proposal.shareToken}`); toast.success("Link copiado!"); }}
                           className="p-1.5 rounded-md hover:bg-accent text-muted-foreground transition-colors" title="Copiar link"
                         >
                           <Copy className="h-3.5 w-3.5" />
                         </button>
                         <button
-                          onClick={() => window.open(`/proposals/view/${proposal.token}`, "_blank")}
+                          onClick={() => window.open(`/proposals/view/${proposal.shareToken}`, "_blank")}
                           className="p-1.5 rounded-md hover:bg-accent text-muted-foreground transition-colors" title="Visualizar"
                         >
                           <ExternalLink className="h-3.5 w-3.5" />
                         </button>
+                        {proposal.status === "accepted" && (
+                          <button
+                            onClick={() => generateDigitalContract.mutate({ proposalId: proposal.id })}
+                            className="p-1.5 rounded-md hover:bg-accent text-emerald-400 transition-colors" title="Gerar contrato digital"
+                            disabled={generateDigitalContract.isPending}
+                          >
+                            <FileSignature className="h-3.5 w-3.5" />
+                          </button>
+                        )}
                         <button
                           onClick={() => setLocation(`/leads/${proposal.leadId}`)}
                           className="p-1.5 rounded-md hover:bg-accent text-muted-foreground transition-colors text-xs"
