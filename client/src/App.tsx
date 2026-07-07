@@ -11,6 +11,7 @@ import Meetings from "./pages/Meetings";
 import Proposals from "./pages/Proposals";
 import ProposalView from "./pages/ProposalView";
 import Contracts from "./pages/Contracts";
+import ContractView from "./pages/ContractView";
 import FollowUps from "./pages/FollowUps";
 import Trials from "./pages/Trials";
 import Referrals from "./pages/Referrals";
@@ -26,6 +27,7 @@ function Router() {
       <Route path="/proposals" component={Proposals} />
       <Route path="/proposals/view/:token" component={ProposalView} />
       <Route path="/contracts" component={Contracts} />
+      <Route path="/contracts/view/:token" component={ContractView} />
       <Route path="/follow-ups" component={FollowUps} />
       <Route path="/trials" component={Trials} />
       <Route path="/referrals" component={Referrals} />

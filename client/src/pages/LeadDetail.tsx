@@ -16,7 +16,7 @@ import {
 } from "@/lib/crm";
 import {
   ArrowLeft, Building2, CalendarDays, CheckSquare, Clock, Edit, FileText,
-  MessageSquare, Phone, Plus, Save, User,
+  MessageSquare, Phone, Plus, Save, User, Zap,
 } from "lucide-react";
 import { useState } from "react";
 import { useLocation, useParams } from "wouter";
@@ -29,6 +29,7 @@ export default function LeadDetail() {
   const [editMode, setEditMode] = useState(false);
   const [showInteraction, setShowInteraction] = useState(false);
   const [showMeeting, setShowMeeting] = useState(false);
+  const [showAutoContractAlert, setShowAutoContractAlert] = useState(false);
   const [interactionForm, setInteractionForm] = useState({ type: "note" as any, content: "" });
   const [meetingForm, setMeetingForm] = useState({ title: "", scheduledAt: "", modality: "online" as any, meetingLink: "", location: "", notes: "" });
   const [editForm, setEditForm] = useState<any>(null);
@@ -60,6 +61,12 @@ export default function LeadDetail() {
   const createMeeting = trpc.meetings.create.useMutation({
     onSuccess: () => { utils.interactions.list.invalidate({ leadId }); setShowMeeting(false); toast.success("Reunião agendada!"); },
   });
+
+  // Detectar proposta aceita sem contrato gerado
+  const { data: proposals = [] } = trpc.proposals.list.useQuery({ leadId });
+  const { data: contracts = [] } = trpc.contracts.list.useQuery({ leadId });
+  const hasAcceptedProposal = (proposals as any[]).some((p: any) => p.status === "accepted");
+  const hasContract = (contracts as any[]).length > 0;
 
   if (isLoading) return <CRMLayout><div className="flex items-center justify-center h-64 text-muted-foreground">Carregando...</div></CRMLayout>;
   if (!lead) return <CRMLayout><div className="flex items-center justify-center h-64 text-muted-foreground">Lead não encontrado</div></CRMLayout>;
@@ -256,6 +263,24 @@ export default function LeadDetail() {
 
           {/* Right: Quick Actions */}
           <div className="space-y-4">
+            {/* Alerta automação: proposta aceita sem contrato */}
+            {hasAcceptedProposal && !hasContract && (
+              <div className="p-3 rounded-xl bg-amber-950/30 border border-amber-700/40 space-y-2">
+                <div className="flex items-center gap-2 text-amber-300">
+                  <Zap className="h-4 w-4 shrink-0" />
+                  <p className="text-xs font-semibold">Proposta aceita! Gerar contrato?</p>
+                </div>
+                <p className="text-xs text-amber-400/70">Uma proposta foi aceita por este lead. Crie o contrato agora para avançar o fluxo.</p>
+                <Button
+                  size="sm"
+                  className="w-full h-8 text-xs bg-amber-700 hover:bg-amber-600 text-white"
+                  onClick={() => setLocation(`/contracts?leadId=${leadId}`)}
+                >
+                  <FileText className="h-3.5 w-3.5 mr-1.5" /> Criar Contrato Agora
+                </Button>
+              </div>
+            )}
+
             <Card className="border-border/40 bg-card/50">
               <CardHeader className="pb-2"><CardTitle className="text-sm font-semibold">Ações Rápidas</CardTitle></CardHeader>
               <CardContent className="space-y-2">

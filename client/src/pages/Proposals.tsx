@@ -68,6 +68,7 @@ export default function Proposals() {
       planName: form.planName,
       monthlyValue: form.monthlyValue,
       setupFee: form.setupFee || undefined,
+      validUntil: form.validUntil ? new Date(form.validUntil).toISOString() : undefined,
       customMessage: generatedMsg || form.customMessage || undefined,
       features: form.features ? form.features.split("\n").filter(Boolean) : undefined,
     });

@@ -141,6 +141,71 @@ const leadsRouter = router({
       await deleteLead(input.id);
       return { success: true };
     }),
+
+  // Rota pública: recebe leads gerados pelo Onboarding da Plataforma Principal
+  inboundFromPlatform: publicProcedure
+    .input(z.object({
+      companyName: z.string().min(1),
+      contactName: z.string().optional(),
+      whatsapp: z.string().optional(),
+      email: z.string().email().optional().or(z.literal("")),
+      segment: z.string().optional(),
+      planName: z.string().optional(),
+      monthlyValue: z.string().optional(),
+      source: z.string().optional(),
+      notes: z.string().optional(),
+      // Chave de segurança simples para evitar spam
+      apiKey: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      // Verificar chave de API (configurar via variável de ambiente)
+      const expectedKey = process.env.PLATFORM_INBOUND_API_KEY;
+      if (expectedKey && input.apiKey !== expectedKey) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Chave de API inválida" });
+      }
+
+      // Verificar se já existe lead com mesmo nome de empresa
+      const existing = await getLeads({ search: input.companyName });
+      const duplicate = existing.find(
+        (l) => l.companyName.toLowerCase().trim() === input.companyName.toLowerCase().trim()
+      );
+      if (duplicate) {
+        // Atualizar interação no lead existente em vez de duplicar
+        await addInteraction({
+          leadId: duplicate.id,
+          type: "system",
+          content: `Lead retornou ao onboarding da plataforma${input.planName ? ` — plano de interesse: ${input.planName}` : ""}`,
+          createdById: 0,
+        });
+        return { success: true, leadId: duplicate.id, duplicate: true };
+      }
+
+      await createLead({
+        companyName: input.companyName,
+        contactName: input.contactName,
+        whatsapp: input.whatsapp,
+        email: input.email,
+        segment: input.segment,
+        monthlyValue: input.monthlyValue as any,
+        source: input.source || "Plataforma Morro Digital (Onboarding)",
+        notes: input.notes || (input.planName ? `Plano de interesse: ${input.planName}` : undefined),
+        stage: "new_lead" as any,
+      });
+
+      const leads = await getLeads({ search: input.companyName });
+      const newLead = leads[0];
+      if (newLead) {
+        await initializeChecklist(newLead.id);
+        await addInteraction({
+          leadId: newLead.id,
+          type: "system",
+          content: `Lead criado automaticamente via Onboarding da Plataforma${input.planName ? ` — plano de interesse: ${input.planName}` : ""}`,
+          createdById: 0,
+        });
+        return { success: true, leadId: newLead.id, duplicate: false };
+      }
+      return { success: true, leadId: null, duplicate: false };
+    }),
 });
 
 // ─── Checklist Router ─────────────────────────────────────────────────────────
@@ -244,6 +309,7 @@ const proposalsRouter = router({
       trialDays: z.number().optional(),
       features: z.array(z.string()).optional(),
       customMessage: z.string().optional(),
+      validUntil: z.string().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const token = nanoid(32);
@@ -252,6 +318,7 @@ const proposalsRouter = router({
         monthlyValue: input.monthlyValue as any,
         setupFee: input.setupFee as any,
         features: input.features ? JSON.stringify(input.features) as any : undefined,
+        validUntil: input.validUntil ? new Date(input.validUntil) : undefined,
         shareToken: token,
         createdById: ctx.user.id,
       });
@@ -281,6 +348,9 @@ const proposalsRouter = router({
     .input(z.object({ id: z.number(), leadId: z.number(), accepted: z.boolean() }))
     .mutation(async ({ input, ctx }) => {
       await updateProposal(input.id, { status: input.accepted ? "accepted" : "rejected", respondedAt: new Date() });
+      if (input.accepted) {
+        await updateLead(input.leadId, { stage: "contract_sent" });
+      }
       await addInteraction({
         leadId: input.leadId,
         type: "proposal",
@@ -288,6 +358,31 @@ const proposalsRouter = router({
         createdById: ctx.user.id,
       });
       return { success: true };
+    }),
+
+  // Rota pública: cliente aceita/recusa proposta via link compartilhado
+  respondByToken: publicProcedure
+    .input(z.object({ token: z.string(), accepted: z.boolean(), respondentName: z.string().optional() }))
+    .mutation(async ({ input }) => {
+      const proposal = await getProposalByToken(input.token);
+      if (!proposal) throw new TRPCError({ code: "NOT_FOUND", message: "Proposta não encontrada" });
+      if (proposal.status === "accepted" || proposal.status === "rejected") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Esta proposta já foi respondida" });
+      }
+      await updateProposal(proposal.id, {
+        status: input.accepted ? "accepted" : "rejected",
+        respondedAt: new Date(),
+      });
+      if (input.accepted) {
+        await updateLead(proposal.leadId, { stage: "contract_sent" });
+      }
+      await addInteraction({
+        leadId: proposal.leadId,
+        type: "proposal",
+        content: `Proposta ${input.accepted ? "aceita" : "recusada"} pelo cliente${input.respondentName ? ` (${input.respondentName})` : ""} via link público`,
+        createdById: 0,
+      });
+      return { success: true, accepted: input.accepted };
     }),
 });
 
@@ -338,8 +433,43 @@ const contractsRouter = router({
     .mutation(async ({ input, ctx }) => {
       await updateContract(input.id, { status: "signed", signedAt: new Date(), signatureData: input.signatureData });
       await updateLead(input.leadId, { stage: "contract_signed" });
-      await addInteraction({ leadId: input.leadId, type: "contract", content: "Contrato assinado pelo cliente", createdById: ctx.user.id });
+      await addInteraction({ leadId: input.leadId, type: "contract", content: "Contrato assinado pelo cliente (via painel)", createdById: ctx.user.id });
       return { success: true };
+    }),
+
+  // Rota pública: cliente assina o contrato via link compartilhado
+  signByToken: publicProcedure
+    .input(z.object({
+      token: z.string(),
+      signatureData: z.string().min(1),
+      signerName: z.string().min(1),
+      signerIp: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const contract = await getContractByToken(input.token);
+      if (!contract) throw new TRPCError({ code: "NOT_FOUND", message: "Contrato não encontrado" });
+      if (contract.status === "signed") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Este contrato já foi assinado" });
+      }
+      if (contract.status === "cancelled") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Este contrato foi cancelado" });
+      }
+      const signerIp = input.signerIp || (ctx.req.headers["x-forwarded-for"] as string) || "desconhecido";
+      await updateContract(contract.id, {
+        status: "signed",
+        signedAt: new Date(),
+        signatureData: input.signatureData,
+        signerName: input.signerName,
+        signerIp,
+      });
+      await updateLead(contract.leadId, { stage: "contract_signed" });
+      await addInteraction({
+        leadId: contract.leadId,
+        type: "contract",
+        content: `Contrato assinado digitalmente por ${input.signerName} (IP: ${signerIp}) via link público`,
+        createdById: 0,
+      });
+      return { success: true, signedAt: new Date().toISOString() };
     }),
 
   generateContent: protectedProcedure
