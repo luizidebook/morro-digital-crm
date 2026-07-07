@@ -112,9 +112,9 @@ export default function LeadDetail() {
           </div>
         </div>
 
-        {/* Stage Selector */}
+        {/* Stage Selector — todas as 16 etapas do funil canônico */}
         <div className="flex items-center gap-2 overflow-x-auto pb-1">
-          {STAGE_ORDER.slice(0, 12).map((stage, i) => (
+          {STAGE_ORDER.map((stage, i) => (
             <button key={stage} onClick={() => updateStage.mutate({ id: leadId, stage })}
               className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${lead.stage === stage ? `${STAGE_COLORS[stage]} ring-2 ring-primary/30` : "bg-card/50 border-border/30 text-muted-foreground hover:border-primary/30"}`}>
               {i + 1}. {STAGE_LABELS[stage]}

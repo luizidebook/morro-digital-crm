@@ -9,12 +9,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
 import { formatDate } from "@/lib/crm";
-import { Gift, Plus, Share2, Users } from "lucide-react";
+import { Gift, Link2, Plus, Share2, Users, XCircle, PhoneCall } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
+type EditForm = {
+  id: number;
+  status: "pending" | "contacted" | "converted" | "lost";
+  benefitDescription: string;
+  referredLeadId: number;
+};
+
 export default function Referrals() {
   const [showForm, setShowForm] = useState(false);
+  const [showEditForm, setShowEditForm] = useState(false);
+  const [editForm, setEditForm] = useState<EditForm>({ id: 0, status: "pending", benefitDescription: "", referredLeadId: 0 });
   const [form, setForm] = useState({
     referrerLeadId: 0,
     referredName: "",
@@ -28,7 +37,17 @@ export default function Referrals() {
   const { data: leads = [] } = trpc.leads.list.useQuery({});
 
   const createReferral = trpc.referrals.create.useMutation({
-    onSuccess: () => { toast.success("Indicação registrada!"); utils.referrals.list.invalidate(); setShowForm(false); },
+    onSuccess: () => {
+      toast.success("Indicação registrada!");
+      utils.referrals.list.invalidate();
+      setShowForm(false);
+      setForm({ referrerLeadId: 0, referredName: "", referredPhone: "", referredEmail: "", notes: "" });
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const updateReferral = trpc.referrals.update.useMutation({
+    onSuccess: () => { toast.success("Indicação atualizada!"); utils.referrals.list.invalidate(); setShowEditForm(false); },
     onError: (e: any) => toast.error(e.message),
   });
 
@@ -50,6 +69,16 @@ export default function Referrals() {
 
   const getLead = (id: number) => (leads as any[]).find((l) => l.id === id);
 
+  const openEditForm = (referral: any) => {
+    setEditForm({
+      id: referral.id,
+      status: referral.status,
+      benefitDescription: referral.benefitDescription || "",
+      referredLeadId: referral.referredLeadId || 0,
+    });
+    setShowEditForm(true);
+  };
+
   return (
     <CRMLayout>
       <div className="space-y-5">
@@ -65,9 +94,10 @@ export default function Referrals() {
 
         {/* Stats */}
         {(referrals as any[]).length > 0 && (
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-4 gap-3">
             {[
               { label: "Total", value: referrals.length, icon: Share2, color: "text-violet-400" },
+              { label: "Contactados", value: (referrals as any[]).filter((r) => r.status === "contacted").length, icon: PhoneCall, color: "text-blue-400" },
               { label: "Convertidas", value: (referrals as any[]).filter((r) => r.status === "converted").length, icon: Users, color: "text-emerald-400" },
               { label: "Benefícios Pendentes", value: (referrals as any[]).filter((r) => r.status === "converted" && !r.benefitGrantedAt).length, icon: Gift, color: "text-amber-400" },
             ].map((stat) => (
@@ -97,6 +127,7 @@ export default function Referrals() {
           <div className="space-y-3">
             {(referrals as any[]).map((referral) => {
               const referrer = getLead(referral.referrerLeadId);
+              const referredLead = referral.referredLeadId ? getLead(referral.referredLeadId) : null;
               return (
                 <Card key={referral.id} className="border-border/40 bg-card/60 hover:border-primary/20 transition-all">
                   <CardContent className="p-4">
@@ -113,6 +144,12 @@ export default function Referrals() {
                           </div>
                           <p className="text-xs text-muted-foreground mt-0.5">{formatDate(referral.createdAt)}</p>
                           {referral.referredPhone && <p className="text-xs text-muted-foreground mt-0.5">📱 {referral.referredPhone}</p>}
+                          {referredLead && (
+                            <div className="flex items-center gap-1.5 mt-1">
+                              <Link2 className="h-3 w-3 text-violet-400" />
+                              <span className="text-xs text-violet-400">Vinculado ao lead: {referredLead.companyName}</span>
+                            </div>
+                          )}
                           {referral.benefitDescription && (
                             <div className="flex items-center gap-1.5 mt-1.5">
                               <Gift className="h-3 w-3 text-amber-400" />
@@ -125,18 +162,40 @@ export default function Referrals() {
                       </div>
                       <div className="flex flex-col items-end gap-2">
                         {getStatusBadge(referral.status)}
+
+                        {/* Ações de progressão de status */}
+                        {referral.status === "pending" && (
+                          <button onClick={() => updateReferral.mutate({ id: referral.id, status: "contacted" })}
+                            className="text-xs text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1">
+                            <PhoneCall className="h-3 w-3" /> Marcar contactado
+                          </button>
+                        )}
+                        {(referral.status === "pending" || referral.status === "contacted") && (
+                          <button onClick={() => updateReferral.mutate({ id: referral.id, status: "converted" })}
+                            className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors flex items-center gap-1">
+                            <Users className="h-3 w-3" /> Marcar convertida
+                          </button>
+                        )}
+                        {(referral.status === "pending" || referral.status === "contacted") && (
+                          <button onClick={() => updateReferral.mutate({ id: referral.id, status: "lost" })}
+                            className="text-xs text-red-400 hover:text-red-300 transition-colors flex items-center gap-1">
+                            <XCircle className="h-3 w-3" /> Marcar perdida
+                          </button>
+                        )}
+
+                        {/* Conceder benefício quando convertida e ainda não concedido */}
                         {referral.status === "converted" && !referral.benefitGrantedAt && referral.benefitDescription && (
                           <button onClick={() => grantBenefit.mutate({ id: referral.id, benefitGrantedAt: new Date().toISOString() })}
                             className="text-xs text-amber-400 hover:text-amber-300 transition-colors flex items-center gap-1">
                             <Gift className="h-3 w-3" /> Conceder benefício
                           </button>
                         )}
-                        {referral.status === "pending" && (
-                          <button onClick={() => grantBenefit.mutate({ id: referral.id, status: "converted" })}
-                            className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors">
-                            Marcar convertida
-                          </button>
-                        )}
+
+                        {/* Editar detalhes da indicação */}
+                        <button onClick={() => openEditForm(referral)}
+                          className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+                          Editar detalhes
+                        </button>
                       </div>
                     </div>
                   </CardContent>
@@ -147,6 +206,7 @@ export default function Referrals() {
         )}
       </div>
 
+      {/* Create Referral Dialog */}
       <Dialog open={showForm} onOpenChange={setShowForm}>
         <DialogContent className="bg-card border-border/50">
           <DialogHeader>
@@ -193,6 +253,58 @@ export default function Referrals() {
               <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
               <Button type="submit" disabled={createReferral.isPending} className="bg-primary text-primary-foreground">
                 {createReferral.isPending ? "Registrando..." : "Registrar Indicação"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Referral Dialog */}
+      <Dialog open={showEditForm} onOpenChange={setShowEditForm}>
+        <DialogContent className="bg-card border-border/50">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Share2 className="h-5 w-5 text-violet-400" /> Editar Indicação</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={(e) => {
+            e.preventDefault();
+            updateReferral.mutate({
+              id: editForm.id,
+              status: editForm.status,
+              benefitDescription: editForm.benefitDescription || undefined,
+              referredLeadId: editForm.referredLeadId || undefined,
+            });
+          }} className="space-y-4 mt-2">
+            <div className="space-y-1.5">
+              <Label>Status</Label>
+              <Select value={editForm.status} onValueChange={(v) => setEditForm({ ...editForm, status: v as EditForm["status"] })}>
+                <SelectTrigger className="bg-background/50"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pending">Pendente</SelectItem>
+                  <SelectItem value="contacted">Contactado</SelectItem>
+                  <SelectItem value="converted">Convertida</SelectItem>
+                  <SelectItem value="lost">Perdida</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Descrição do Benefício (para o indicador)</Label>
+              <Input value={editForm.benefitDescription} onChange={(e) => setEditForm({ ...editForm, benefitDescription: e.target.value })} placeholder="Ex: 1 mês grátis, desconto de 20%..." className="bg-background/50" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Vincular ao Lead Indicado (se já cadastrado)</Label>
+              <Select value={editForm.referredLeadId ? String(editForm.referredLeadId) : "none"} onValueChange={(v) => setEditForm({ ...editForm, referredLeadId: v === "none" ? 0 : parseInt(v) })}>
+                <SelectTrigger className="bg-background/50"><SelectValue placeholder="Nenhum (ainda não cadastrado)" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Nenhum</SelectItem>
+                  {(leads as any[]).map((l) => <SelectItem key={l.id} value={String(l.id)}>{l.companyName}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">Vincule quando o indicado for cadastrado como lead no CRM</p>
+            </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <Button type="button" variant="outline" onClick={() => setShowEditForm(false)}>Cancelar</Button>
+              <Button type="submit" disabled={updateReferral.isPending} className="bg-primary text-primary-foreground">
+                {updateReferral.isPending ? "Salvando..." : "Salvar Alterações"}
               </Button>
             </div>
           </form>

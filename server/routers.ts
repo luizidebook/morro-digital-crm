@@ -485,6 +485,26 @@ const contractsRouter = router({
       return { success: true, signedAt: new Date().toISOString() };
     }),
 
+  // Cancelar contrato — disponível para rascunhos e contratos enviados (não assinados)
+  cancel: protectedProcedure
+    .input(z.object({ id: z.number(), leadId: z.number(), reason: z.string().optional() }))
+    .mutation(async ({ input, ctx }) => {
+      const contracts = await getContracts(input.leadId);
+      const contract = contracts.find((c) => c.id === input.id);
+      if (!contract) throw new TRPCError({ code: "NOT_FOUND", message: "Contrato não encontrado" });
+      if (contract.status === "signed") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Não é possível cancelar um contrato já assinado" });
+      }
+      await updateContract(input.id, { status: "cancelled" });
+      await addInteraction({
+        leadId: input.leadId,
+        type: "contract",
+        content: `Contrato cancelado${input.reason ? `: ${input.reason}` : ""}`,
+        createdById: ctx.user.id,
+      });
+      return { success: true };
+    }),
+
   generateContent: protectedProcedure
     .input(z.object({ leadId: z.number() }))
     .mutation(async ({ input }) => {
@@ -632,6 +652,34 @@ const trialsRouter = router({
         await updateLead(leadId, { stage: "active_client", convertedAt: new Date() });
         await addInteraction({ leadId, type: "system", content: "Trial convertido — cliente ativo!", createdById: ctx.user.id });
       }
+      return { success: true };
+    }),
+
+  // Converter trial manualmente — marca como cliente ativo
+  convert: protectedProcedure
+    .input(z.object({ id: z.number(), leadId: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      await updateTrial(input.id, { status: "converted", convertedAt: new Date() });
+      await updateLead(input.leadId, { stage: "active_client", convertedAt: new Date() });
+      await addInteraction({ leadId: input.leadId, type: "system", content: "Trial convertido manualmente — cliente ativo!", createdById: ctx.user.id });
+      return { success: true };
+    }),
+
+  // Cancelar trial manualmente
+  cancel: protectedProcedure
+    .input(z.object({ id: z.number(), leadId: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      await updateTrial(input.id, { status: "cancelled" });
+      await addInteraction({ leadId: input.leadId, type: "system", content: "Trial cancelado manualmente.", createdById: ctx.user.id });
+      return { success: true };
+    }),
+
+  // Marcar trial como expirado manualmente
+  expire: protectedProcedure
+    .input(z.object({ id: z.number(), leadId: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      await updateTrial(input.id, { status: "expired" });
+      await addInteraction({ leadId: input.leadId, type: "system", content: "Trial marcado como expirado manualmente.", createdById: ctx.user.id });
       return { success: true };
     }),
 });

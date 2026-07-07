@@ -18,6 +18,7 @@ import {
   Plus,
   Sparkles,
   Shield,
+  XCircle,
 } from "lucide-react";
 import { useState } from "react";
 import { useSearch } from "wouter";
@@ -97,6 +98,14 @@ export default function Contracts() {
     onError: (e: any) => toast.error(e.message),
   });
 
+  const cancelContract = trpc.contracts.cancel.useMutation({
+    onSuccess: () => {
+      toast.success("Contrato cancelado.");
+      utils.contracts.list.invalidate();
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
   const generateContent = trpc.contracts.generateContent.useMutation({
     onSuccess: (data) => {
       const contentStr = typeof data.content === 'string' ? data.content : JSON.stringify(data.content);
@@ -121,6 +130,8 @@ export default function Contracts() {
     if (!form.leadId) return toast.error("Selecione um lead");
     createContract.mutate({
       leadId: form.leadId,
+      // Vincula a proposta aceita ao contrato para rastreabilidade do pipeline
+      proposalId: preselectedProposalId || undefined,
       title: form.title,
       content: form.content,
       monthlyValue: form.monthlyValue || undefined,
@@ -254,6 +265,19 @@ export default function Contracts() {
                           className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
                         >
                           Marcar como assinado (painel)
+                        </button>
+                      )}
+                      {(contract.status === "draft" || contract.status === "sent") && (
+                        <button
+                          onClick={() => {
+                            if (window.confirm("Tem certeza que deseja cancelar este contrato? Esta ação não pode ser desfeita.")) {
+                              cancelContract.mutate({ id: contract.id, leadId: contract.leadId });
+                            }
+                          }}
+                          className="text-xs text-red-400 hover:text-red-300 transition-colors flex items-center gap-1"
+                          title="Cancelar contrato"
+                        >
+                          <XCircle className="h-3 w-3" /> Cancelar
                         </button>
                       )}
                     </div>

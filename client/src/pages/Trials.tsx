@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { trpc } from "@/lib/trpc";
 import { formatDate } from "@/lib/crm";
-import { Clock, Plus, Timer } from "lucide-react";
+import { CheckCircle2, Clock, Plus, Timer, XCircle, AlertCircle } from "lucide-react";
 import { useState } from "react";
 import { useSearch } from "wouter";
 import { toast } from "sonner";
@@ -36,6 +36,21 @@ export default function Trials() {
     onError: (e: any) => toast.error(e.message),
   });
 
+  const convertTrial = trpc.trials.convert.useMutation({
+    onSuccess: () => { toast.success("Trial convertido! Lead avançado para Cliente Ativo."); utils.trials.list.invalidate(); },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const cancelTrial = trpc.trials.cancel.useMutation({
+    onSuccess: () => { toast.success("Trial cancelado."); utils.trials.list.invalidate(); },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const expireTrial = trpc.trials.expire.useMutation({
+    onSuccess: () => { toast.success("Trial marcado como expirado."); utils.trials.list.invalidate(); },
+    onError: (e: any) => toast.error(e.message),
+  });
+
   const getStatusBadge = (status: string) => {
     const map: Record<string, string> = {
       active: "bg-cyan-950 text-cyan-300 border-cyan-800",
@@ -50,8 +65,7 @@ export default function Trials() {
   const getDaysRemaining = (endDate: string | Date) => {
     const now = new Date();
     const end = new Date(endDate);
-    const diff = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-    return diff;
+    return Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
   };
 
   return (
@@ -80,6 +94,7 @@ export default function Trials() {
             {(trials as any[]).map((trial) => {
               const daysLeft = getDaysRemaining(trial.endDate);
               const lead = (leads as any[]).find((l) => l.id === trial.leadId);
+              const isActive = trial.status === "active";
               return (
                 <Card key={trial.id} className="border-border/40 bg-card/60 hover:border-primary/20 transition-all">
                   <CardContent className="p-4">
@@ -93,19 +108,56 @@ export default function Trials() {
                           <p className="text-xs text-muted-foreground mt-0.5">
                             {formatDate(trial.startDate)} → {formatDate(trial.endDate)}
                           </p>
-                          {trial.status === "active" && (
+                          {isActive && (
                             <p className={`text-xs mt-1 font-medium ${daysLeft > 7 ? "text-cyan-400" : daysLeft > 0 ? "text-amber-400" : "text-red-400"}`}>
-                              {daysLeft > 0 ? `${daysLeft} dias restantes` : "Expirado"}
+                              {daysLeft > 0 ? `${daysLeft} dias restantes` : "Expirado (aguardando atualização)"}
                             </p>
+                          )}
+                          {trial.convertedAt && (
+                            <p className="text-xs text-emerald-400 mt-1">Convertido em {formatDate(trial.convertedAt)}</p>
                           )}
                         </div>
                       </div>
+
                       <div className="flex flex-col items-end gap-2">
                         {getStatusBadge(trial.status)}
                         <div className="flex items-center gap-1.5">
                           <Clock className="h-3 w-3 text-muted-foreground" />
                           <span className="text-xs text-muted-foreground">{trial.durationDays} dias</span>
                         </div>
+
+                        {/* Ações disponíveis apenas para trials ativos */}
+                        {isActive && (
+                          <div className="flex flex-col items-end gap-1 mt-1">
+                            <button
+                              onClick={() => convertTrial.mutate({ id: trial.id, leadId: trial.leadId })}
+                              disabled={convertTrial.isPending}
+                              className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors flex items-center gap-1"
+                            >
+                              <CheckCircle2 className="h-3 w-3" /> Converter em cliente
+                            </button>
+                            {daysLeft <= 0 && (
+                              <button
+                                onClick={() => expireTrial.mutate({ id: trial.id, leadId: trial.leadId })}
+                                disabled={expireTrial.isPending}
+                                className="text-xs text-amber-400 hover:text-amber-300 transition-colors flex items-center gap-1"
+                              >
+                                <AlertCircle className="h-3 w-3" /> Marcar como expirado
+                              </button>
+                            )}
+                            <button
+                              onClick={() => {
+                                if (window.confirm("Tem certeza que deseja cancelar este trial?")) {
+                                  cancelTrial.mutate({ id: trial.id, leadId: trial.leadId });
+                                }
+                              }}
+                              disabled={cancelTrial.isPending}
+                              className="text-xs text-red-400 hover:text-red-300 transition-colors flex items-center gap-1"
+                            >
+                              <XCircle className="h-3 w-3" /> Cancelar trial
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </CardContent>

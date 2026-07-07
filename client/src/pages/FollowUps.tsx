@@ -1,15 +1,14 @@
 import CRMLayout from "@/components/CRMLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
 import { formatDate, formatRelativeTime, getWhatsAppLink } from "@/lib/crm";
-import { Bell, Copy, Loader2, MessageSquare, Plus, Settings, Sparkles } from "lucide-react";
+import { Bell, CheckCircle2, Copy, Loader2, MessageSquare, Plus, Settings, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { useSearch } from "wouter";
 import { toast } from "sonner";
@@ -20,10 +19,15 @@ export default function FollowUps() {
   const preselectedLeadId = params.get("leadId") ? parseInt(params.get("leadId")!) : undefined;
 
   const [showSettings, setShowSettings] = useState(false);
+  const [showCreateForm, setShowCreateForm] = useState(false);
   const [generating, setGenerating] = useState<number | null>(null);
-  // settingsId guarda o id do registro ativo para garantir UPDATE em vez de INSERT
   const [settingsId, setSettingsId] = useState<number | undefined>(undefined);
   const [settingsForm, setSettingsForm] = useState({ name: "Padrão", intervalDays: 3, maxAttempts: 5, isActive: true });
+  const [createForm, setCreateForm] = useState({
+    leadId: preselectedLeadId || 0,
+    scheduledAt: new Date().toISOString().split("T")[0],
+    attemptNumber: 1,
+  });
 
   const utils = trpc.useUtils();
   const { data: followUps = [], isLoading } = trpc.followUps.list.useQuery(
@@ -39,6 +43,16 @@ export default function FollowUps() {
     onError: (e: any) => toast.error(e.message),
   });
 
+  const createFollowUp = trpc.followUps.create.useMutation({
+    onSuccess: () => {
+      toast.success("Follow-up criado!");
+      utils.followUps.list.invalidate();
+      setShowCreateForm(false);
+      setCreateForm({ leadId: preselectedLeadId || 0, scheduledAt: new Date().toISOString().split("T")[0], attemptNumber: 1 });
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
   const generateMessage = trpc.followUps.generateMessage.useMutation({
     onSuccess: () => {
       toast.success("Mensagem gerada!");
@@ -50,6 +64,12 @@ export default function FollowUps() {
 
   const markSent = trpc.followUps.markSent.useMutation({
     onSuccess: () => { toast.success("Marcado como enviado!"); utils.followUps.list.invalidate(); },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const markResponded = trpc.followUps.markResponded.useMutation({
+    onSuccess: () => { toast.success("Lead marcado como respondeu!"); utils.followUps.list.invalidate(); },
+    onError: (e: any) => toast.error(e.message),
   });
 
   const getStatusBadge = (status: string) => {
@@ -72,7 +92,14 @@ export default function FollowUps() {
             <p className="text-sm text-muted-foreground">{followUps.length} follow-up(s) gerado(s)</p>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => { const s = activeSetting; if (s) { setSettingsId(s.id); setSettingsForm({ name: s.name || "Padrão", intervalDays: s.intervalDays, maxAttempts: s.maxAttempts, isActive: s.isActive }); } setShowSettings(true); }} className="gap-2 border-border/50">
+            <Button variant="outline" size="sm" onClick={() => setShowCreateForm(true)} className="gap-2 border-border/50">
+              <Plus className="h-4 w-4" /> Novo Follow-up
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => {
+              const s = activeSetting;
+              if (s) { setSettingsId(s.id); setSettingsForm({ name: s.name || "Padrão", intervalDays: s.intervalDays, maxAttempts: s.maxAttempts, isActive: s.isActive }); }
+              setShowSettings(true);
+            }} className="gap-2 border-border/50">
               <Settings className="h-4 w-4" /> Configurar
             </Button>
           </div>
@@ -92,7 +119,8 @@ export default function FollowUps() {
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <MessageSquare className="h-12 w-12 text-muted-foreground/30 mb-4" />
             <p className="text-muted-foreground font-medium">Nenhum follow-up gerado</p>
-            <p className="text-sm text-muted-foreground/60 mt-1">Os follow-ups são gerados automaticamente para leads sem resposta</p>
+            <p className="text-sm text-muted-foreground/60 mt-1">Os follow-ups são gerados automaticamente para leads sem resposta, ou você pode criar um manualmente.</p>
+            <Button onClick={() => setShowCreateForm(true)} className="mt-4 gap-2" size="sm"><Plus className="h-4 w-4" /> Criar Follow-up Manual</Button>
           </div>
         ) : (
           <div className="space-y-3">
@@ -108,7 +136,10 @@ export default function FollowUps() {
                         </div>
                         <div>
                           <p className="font-semibold text-sm">{lead?.companyName || `Lead #${fu.leadId}`}</p>
-                          <p className="text-xs text-muted-foreground">{formatRelativeTime(fu.scheduledAt)}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatRelativeTime(fu.scheduledAt)}
+                            {fu.attemptNumber && <span className="ml-2 text-muted-foreground/60">· Tentativa #{fu.attemptNumber}</span>}
+                          </p>
                         </div>
                       </div>
                       {getStatusBadge(fu.status)}
@@ -117,7 +148,7 @@ export default function FollowUps() {
                     {fu.generatedMessage ? (
                       <div className="relative p-3 rounded-lg bg-background/50 border border-border/30 text-sm text-muted-foreground leading-relaxed">
                         <p className="whitespace-pre-wrap text-xs">{fu.generatedMessage}</p>
-                        <div className="flex items-center gap-2 mt-3">
+                        <div className="flex items-center gap-2 mt-3 flex-wrap">
                           <button onClick={() => { navigator.clipboard.writeText(fu.generatedMessage); toast.success("Copiado!"); }}
                             className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
                             <Copy className="h-3 w-3" /> Copiar
@@ -128,12 +159,20 @@ export default function FollowUps() {
                               <MessageSquare className="h-3 w-3" /> Abrir WhatsApp
                             </a>
                           )}
-                          {fu.status === "pending" && (
-                            <button onClick={() => markSent.mutate({ id: fu.id, leadId: fu.leadId })}
-                              className="ml-auto text-xs text-blue-400 hover:text-blue-300 transition-colors">
-                              Marcar como enviado
-                            </button>
-                          )}
+                          <div className="ml-auto flex items-center gap-2">
+                            {fu.status === "pending" && (
+                              <button onClick={() => markSent.mutate({ id: fu.id, leadId: fu.leadId })}
+                                className="text-xs text-blue-400 hover:text-blue-300 transition-colors">
+                                Marcar como enviado
+                              </button>
+                            )}
+                            {fu.status === "sent" && (
+                              <button onClick={() => markResponded.mutate({ id: fu.id, leadId: fu.leadId })}
+                                className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 transition-colors">
+                                <CheckCircle2 className="h-3 w-3" /> Lead respondeu
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     ) : (
@@ -151,6 +190,49 @@ export default function FollowUps() {
           </div>
         )}
       </div>
+
+      {/* Create Follow-up Manual Dialog */}
+      <Dialog open={showCreateForm} onOpenChange={setShowCreateForm}>
+        <DialogContent className="bg-card border-border/50">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><MessageSquare className="h-5 w-5 text-blue-400" /> Novo Follow-up Manual</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={(e) => {
+            e.preventDefault();
+            if (!createForm.leadId) return toast.error("Selecione um lead");
+            createFollowUp.mutate({
+              leadId: createForm.leadId,
+              scheduledAt: new Date(createForm.scheduledAt).toISOString(),
+              attemptNumber: createForm.attemptNumber,
+            });
+          }} className="space-y-4 mt-2">
+            <div className="space-y-1.5">
+              <Label>Lead / Empresa *</Label>
+              <Select value={createForm.leadId ? String(createForm.leadId) : ""} onValueChange={(v) => setCreateForm({ ...createForm, leadId: parseInt(v) })}>
+                <SelectTrigger className="bg-background/50"><SelectValue placeholder="Selecione o lead..." /></SelectTrigger>
+                <SelectContent>{(leads as any[]).map((l) => <SelectItem key={l.id} value={String(l.id)}>{l.companyName}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Data Agendada</Label>
+                <Input type="date" value={createForm.scheduledAt} onChange={(e) => setCreateForm({ ...createForm, scheduledAt: e.target.value })} className="bg-background/50" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Nº da Tentativa</Label>
+                <Input type="number" min={1} max={20} value={createForm.attemptNumber} onChange={(e) => setCreateForm({ ...createForm, attemptNumber: parseInt(e.target.value) || 1 })} className="bg-background/50" />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">Após criar, use o botão "Gerar Mensagem" para criar a mensagem personalizada com IA.</p>
+            <div className="flex justify-end gap-3 pt-2">
+              <Button type="button" variant="outline" onClick={() => setShowCreateForm(false)}>Cancelar</Button>
+              <Button type="submit" disabled={createFollowUp.isPending} className="bg-primary text-primary-foreground">
+                {createFollowUp.isPending ? "Criando..." : "Criar Follow-up"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Settings Dialog */}
       <Dialog open={showSettings} onOpenChange={setShowSettings}>
