@@ -21,6 +21,8 @@ export default function FollowUps() {
 
   const [showSettings, setShowSettings] = useState(false);
   const [generating, setGenerating] = useState<number | null>(null);
+  // settingsId guarda o id do registro ativo para garantir UPDATE em vez de INSERT
+  const [settingsId, setSettingsId] = useState<number | undefined>(undefined);
   const [settingsForm, setSettingsForm] = useState({ name: "Padrão", intervalDays: 3, maxAttempts: 5, isActive: true });
 
   const utils = trpc.useUtils();
@@ -70,7 +72,7 @@ export default function FollowUps() {
             <p className="text-sm text-muted-foreground">{followUps.length} follow-up(s) gerado(s)</p>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => { const s = activeSetting;             if (s) setSettingsForm({ name: s.name || "Padrão", intervalDays: s.intervalDays, maxAttempts: s.maxAttempts, isActive: s.isActive }); setShowSettings(true); }} className="gap-2 border-border/50">
+            <Button variant="outline" size="sm" onClick={() => { const s = activeSetting; if (s) { setSettingsId(s.id); setSettingsForm({ name: s.name || "Padrão", intervalDays: s.intervalDays, maxAttempts: s.maxAttempts, isActive: s.isActive }); } setShowSettings(true); }} className="gap-2 border-border/50">
               <Settings className="h-4 w-4" /> Configurar
             </Button>
           </div>
@@ -156,7 +158,7 @@ export default function FollowUps() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><Settings className="h-5 w-5 text-primary" /> Configurar Follow-up Automático</DialogTitle>
           </DialogHeader>
-          <form onSubmit={(e) => { e.preventDefault(); saveSettings.mutate(settingsForm); }} className="space-y-4 mt-2">
+          <form onSubmit={(e) => { e.preventDefault(); saveSettings.mutate({ ...settingsForm, id: settingsId }); }} className="space-y-4 mt-2">
             <div className="space-y-1.5">
               <Label>Intervalo entre tentativas (dias)</Label>
               <Input type="number" min={1} max={30} value={settingsForm.intervalDays} onChange={(e) => setSettingsForm({ ...settingsForm, intervalDays: parseInt(e.target.value) || 3 })} className="bg-background/50" />

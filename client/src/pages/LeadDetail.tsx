@@ -287,7 +287,13 @@ export default function LeadDetail() {
                 <Button variant="outline" className="w-full justify-start gap-2 text-sm h-9 border-border/40" onClick={() => setLocation(`/proposals?leadId=${leadId}`)}>
                   <FileText className="h-4 w-4 text-amber-400" /> Criar Proposta
                 </Button>
-                <Button variant="outline" className="w-full justify-start gap-2 text-sm h-9 border-border/40" onClick={() => setLocation(`/contracts?leadId=${leadId}`)}>
+                <Button variant="outline" className="w-full justify-start gap-2 text-sm h-9 border-border/40" onClick={() => {
+                  const acceptedProposal = (proposals as any[]).find((p: any) => p.status === "accepted");
+                  const query = acceptedProposal
+                    ? `/contracts?leadId=${leadId}&proposalId=${acceptedProposal.id}&monthlyValue=${encodeURIComponent(acceptedProposal.monthlyValue || "")}`
+                    : `/contracts?leadId=${leadId}`;
+                  setLocation(query);
+                }}>
                   <FileText className="h-4 w-4 text-emerald-400" /> Criar Contrato
                 </Button>
                 <Button variant="outline" className="w-full justify-start gap-2 text-sm h-9 border-border/40" onClick={() => setLocation(`/trials?leadId=${leadId}`)}>

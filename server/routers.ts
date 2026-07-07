@@ -3,6 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { nanoid } from "nanoid";
 import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies";
+import { ENV } from "./_core/env";
 import { invokeLLM } from "./_core/llm";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
@@ -344,6 +345,14 @@ const proposalsRouter = router({
       return { success: true };
     }),
 
+  // Busca a proposta aceita mais recente de um lead (para pré-preencher o contrato)
+  getAccepted: protectedProcedure
+    .input(z.object({ leadId: z.number() }))
+    .query(async ({ input }) => {
+      const proposals = await getProposals(input.leadId);
+      return proposals.find((p) => p.status === "accepted") || null;
+    }),
+
   respond: protectedProcedure
     .input(z.object({ id: z.number(), leadId: z.number(), accepted: z.boolean() }))
     .mutation(async ({ input, ctx }) => {
@@ -368,6 +377,10 @@ const proposalsRouter = router({
       if (!proposal) throw new TRPCError({ code: "NOT_FOUND", message: "Proposta não encontrada" });
       if (proposal.status === "accepted" || proposal.status === "rejected") {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Esta proposta já foi respondida" });
+      }
+      // Verificar expiração no backend (segurança extra além da UI)
+      if (proposal.validUntil && new Date(proposal.validUntil) < new Date()) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Esta proposta está expirada. Entre em contato para obter uma nova proposta." });
       }
       await updateProposal(proposal.id, {
         status: input.accepted ? "accepted" : "rejected",
@@ -724,6 +737,12 @@ export const appRouter = router({
   referrals: referralsRouter,
   metrics: metricsRouter,
   llm: llmRouter,
+  // Rota pública para configurações exibidas em páginas sem autenticação
+  config: router({
+    public: publicProcedure.query(() => ({
+      contactWhatsApp: ENV.contactWhatsApp,
+    })),
+  }),
 });
 
 export type AppRouter = typeof appRouter;

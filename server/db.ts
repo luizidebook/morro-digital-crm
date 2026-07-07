@@ -339,6 +339,26 @@ export async function updateReferral(id: number, data: Partial<typeof referrals.
 }
 
 // ─── Metrics ──────────────────────────────────────────────────────────────────
+// Ordem canônica do funil — alinhada com o enum de leads.stage no schema
+export const FUNNEL_STAGE_ORDER = [
+  "new_lead",
+  "first_contact",
+  "meeting_scheduled",
+  "proposal_sent",
+  "trial",
+  "contract_sent",
+  "contract_signed",
+  "payment_pending",
+  "payment_done",
+  "onboarding",
+  "photo_visit_scheduled",
+  "photo_visit_done",
+  "published",
+  "announced",
+  "feedback",
+  "active_client",
+] as const;
+
 export async function getFunnelMetrics() {
   const db = await getDb();
   if (!db) return null;
@@ -360,17 +380,12 @@ export async function getFunnelMetrics() {
 
   const conversionRate = total > 0 ? Math.round((converted / total) * 100) : 0;
 
-  // Calcular taxa de conversão por etapa do funil
-  const stageOrder = [
-    "new_lead", "first_contact", "meeting_scheduled", "proposal_sent",
-    "trial", "negotiating", "contract_sent", "contract_signed",
-    "payment_pending", "onboarding", "active_client",
-  ];
+  // Calcular taxa de conversão por etapa — usando a ordem canônica do funil
   const stageConversion: Array<{ stage: string; count: number; conversionRate: number }> = [];
-  for (let i = 0; i < stageOrder.length; i++) {
-    const stage = stageOrder[i];
+  for (let i = 0; i < FUNNEL_STAGE_ORDER.length; i++) {
+    const stage = FUNNEL_STAGE_ORDER[i];
     const count = stageGroups[stage] || 0;
-    const prevStage = i > 0 ? stageOrder[i - 1] : null;
+    const prevStage = i > 0 ? FUNNEL_STAGE_ORDER[i - 1] : null;
     const prevCount = prevStage ? (stageGroups[prevStage] || 0) : total;
     const rate = prevCount > 0 ? Math.round((count / prevCount) * 100) : 0;
     stageConversion.push({ stage, count, conversionRate: rate });

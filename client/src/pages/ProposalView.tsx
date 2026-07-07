@@ -8,6 +8,7 @@ import { toast } from "sonner";
 export default function ProposalView() {
   const { token } = useParams<{ token: string }>();
   const { data: proposal, isLoading, refetch } = trpc.proposals.getByToken.useQuery({ token });
+  const { data: config } = trpc.config.public.useQuery();
   const [respondentName, setRespondentName] = useState("");
   const [showNameInput, setShowNameInput] = useState(false);
   const [pendingAction, setPendingAction] = useState<"accept" | "reject" | null>(null);
@@ -76,6 +77,10 @@ export default function ProposalView() {
   const alreadyAccepted = proposal.status === "accepted";
   const alreadyRejected = proposal.status === "rejected";
   const alreadyResponded = alreadyAccepted || alreadyRejected;
+
+  // Número de WhatsApp vindo da configuração do servidor (não hardcoded)
+  const whatsappNumber = config?.contactWhatsApp ?? "5575999999999";
+  const whatsappLink = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent("Olá! Tenho dúvidas sobre a proposta do Morro Digital.")}`;
 
   return (
     <div className="min-h-screen bg-background py-12 px-4">
@@ -231,7 +236,7 @@ export default function ProposalView() {
         <div className="text-center pt-2 border-t border-border/20">
           <p className="text-xs text-muted-foreground mb-2">Dúvidas? Fale conosco diretamente:</p>
           <a
-            href="https://wa.me/5575999999999?text=Ol%C3%A1!%20Tenho%20d%C3%BAvidas%20sobre%20a%20proposta%20do%20Morro%20Digital."
+            href={whatsappLink}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-green-800/60 hover:bg-green-700/70 text-green-300 text-sm font-medium transition-colors border border-green-700/30"

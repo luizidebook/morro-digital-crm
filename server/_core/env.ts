@@ -7,4 +7,7 @@ export const ENV = {
   isProduction: process.env.NODE_ENV === "production",
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
+  // Número de WhatsApp público para contato (sem +, ex: 5575999999999)
+  // Configure via variável de ambiente CONTACT_WHATSAPP no painel do projeto
+  contactWhatsApp: process.env.CONTACT_WHATSAPP ?? "5575999999999",
 };

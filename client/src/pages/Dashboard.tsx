@@ -2,7 +2,7 @@ import CRMLayout from "@/components/CRMLayout";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { trpc } from "@/lib/trpc";
-import { formatCurrency, formatRelativeTime, INTERACTION_ICONS, INTERACTION_LABELS, STAGE_LABELS } from "@/lib/crm";
+import { formatCurrency, formatRelativeTime, INTERACTION_ICONS, INTERACTION_LABELS, STAGE_LABELS, STAGE_ORDER } from "@/lib/crm";
 import {
   ArrowUpRight,
   Building2,
@@ -24,23 +24,41 @@ import {
   Cell,
 } from "recharts";
 
-const FUNNEL_STAGES = [
-  { key: "new_lead", label: "Novos Leads", color: "#64748b" },
-  { key: "first_contact", label: "1º Contato", color: "#3b82f6" },
-  { key: "meeting_scheduled", label: "Reunião", color: "#8b5cf6" },
-  { key: "proposal_sent", label: "Proposta", color: "#f59e0b" },
-  { key: "trial", label: "Trial", color: "#06b6d4" },
-  { key: "contract_signed", label: "Contrato", color: "#10b981" },
-  { key: "active_client", label: "Clientes", color: "#22c55e" },
+// Paleta de cores para o gráfico de funil — gerada dinamicamente a partir do STAGE_ORDER canônico
+const FUNNEL_COLORS: Record<string, string> = {
+  new_lead: "#64748b",
+  first_contact: "#3b82f6",
+  meeting_scheduled: "#8b5cf6",
+  proposal_sent: "#f59e0b",
+  trial: "#06b6d4",
+  contract_sent: "#f97316",
+  contract_signed: "#10b981",
+  payment_pending: "#eab308",
+  payment_done: "#22c55e",
+  onboarding: "#14b8a6",
+  photo_visit_scheduled: "#6366f1",
+  photo_visit_done: "#a855f7",
+  published: "#84cc16",
+  announced: "#ec4899",
+  feedback: "#f43f5e",
+  active_client: "#10b981",
+};
+
+// Exibir apenas as etapas principais no gráfico para não sobrecarregar a visualização
+const FUNNEL_CHART_STAGES = [
+  "new_lead", "first_contact", "meeting_scheduled", "proposal_sent",
+  "trial", "contract_signed", "payment_done", "active_client",
 ];
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();
   const { data: metrics, isLoading } = trpc.metrics.funnel.useQuery(undefined, { refetchInterval: 30000 });
 
-  const funnelData = FUNNEL_STAGES.map((stage) => ({
-    ...stage,
-    count: metrics?.stageGroups?.[stage.key] || 0,
+  const funnelData = FUNNEL_CHART_STAGES.map((key) => ({
+    key,
+    label: STAGE_LABELS[key] || key,
+    color: FUNNEL_COLORS[key] || "#64748b",
+    count: metrics?.stageGroups?.[key] || 0,
   }));
 
   const statCards = [

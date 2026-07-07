@@ -54,13 +54,16 @@ export default function Contracts() {
   const search = useSearch();
   const params = new URLSearchParams(search);
   const preselectedLeadId = params.get("leadId") ? parseInt(params.get("leadId")!) : undefined;
+  const preselectedMonthlyValue = params.get("monthlyValue") ? decodeURIComponent(params.get("monthlyValue")!) : "";
+  const preselectedProposalId = params.get("proposalId") ? parseInt(params.get("proposalId")!) : undefined;
 
   const [showForm, setShowForm] = useState(!!preselectedLeadId);
   const [generatingContent, setGeneratingContent] = useState(false);
   const [form, setForm] = useState({
     leadId: preselectedLeadId || 0,
     title: "Contrato de Prestação de Serviços — Morro Digital",
-    monthlyValue: "",
+    // Pré-preencher valor mensal se vier de uma proposta aceita
+    monthlyValue: preselectedMonthlyValue,
     startDate: "",
     content: DEFAULT_CONTRACT_CONTENT,
   });
@@ -271,6 +274,13 @@ export default function Contracts() {
             </DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+            {/* Banner informativo quando vem de uma proposta aceita */}
+            {preselectedProposalId && (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-950/30 border border-emerald-800/30 text-emerald-300 text-xs">
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                <span>Contrato sendo criado a partir de uma <strong>proposta aceita</strong>. Valor mensal pré-preenchido automaticamente.</span>
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label>Lead / Empresa *</Label>
               <Select

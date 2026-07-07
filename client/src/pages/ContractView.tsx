@@ -157,6 +157,7 @@ function SignatureCanvas({
 export default function ContractView() {
   const { token } = useParams<{ token: string }>();
   const { data: contract, isLoading, refetch } = trpc.contracts.getByToken.useQuery({ token });
+  const { data: config } = trpc.config.public.useQuery();
   const [signerName, setSignerName] = useState("");
   const [step, setStep] = useState<"read" | "sign" | "done">("read");
   const [agreed, setAgreed] = useState(false);
@@ -205,6 +206,11 @@ export default function ContractView() {
 
   const isSigned = contract.status === "signed";
   const isCancelled = contract.status === "cancelled";
+
+  // Número de WhatsApp vindo da configuração do servidor (não hardcoded)
+  const whatsappNumber = config?.contactWhatsApp ?? "5575999999999";
+  const whatsappLinkDuvidas = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent("Olá! Tenho dúvidas sobre a proposta do Morro Digital.")}`;
+  const whatsappLinkAssinado = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent("Olá! Acabei de assinar o contrato do Morro Digital.")}`;
 
   return (
     <div className="min-h-screen bg-background py-12 px-4">
@@ -347,12 +353,27 @@ export default function ContractView() {
               Sua assinatura foi registrada. Nossa equipe receberá uma notificação e dará início ao processo de onboarding.
             </p>
             <a
-              href="https://wa.me/5575999999999?text=Ol%C3%A1!%20Acabei%20de%20assinar%20o%20contrato%20do%20Morro%20Digital."
+              href={whatsappLinkAssinado}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-green-800/60 hover:bg-green-700/70 text-green-300 text-sm font-medium transition-colors border border-green-700/30 mt-2"
             >
               💬 Falar com a equipe no WhatsApp
+            </a>
+          </div>
+        )}
+
+        {/* Rodapé com link de dúvidas — disponível sempre que não estiver na tela de assinatura concluída */}
+        {step !== "done" && !isSigned && (
+          <div className="text-center pt-2 border-t border-border/20">
+            <p className="text-xs text-muted-foreground mb-2">Dúvidas sobre o contrato?</p>
+            <a
+              href={whatsappLinkDuvidas}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-green-800/40 hover:bg-green-700/50 text-green-300 text-xs font-medium transition-colors border border-green-700/20"
+            >
+              💬 Falar com a equipe
             </a>
           </div>
         )}

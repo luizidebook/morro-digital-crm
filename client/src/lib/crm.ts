@@ -1,4 +1,6 @@
 // ─── Stage Labels & Colors ────────────────────────────────────────────────────
+// IMPORTANTE: Esta lista deve estar em paridade com o enum `leads.stage` em drizzle/schema.ts
+// e com FUNNEL_STAGE_ORDER em server/db.ts
 export const STAGE_LABELS: Record<string, string> = {
   new_lead: "Novo Lead",
   first_contact: "Primeiro Contato",
@@ -41,11 +43,24 @@ export const STAGE_COLORS: Record<string, string> = {
   lost: "bg-zinc-900 text-zinc-400 border-zinc-700",
 };
 
+// Ordem canônica do funil — deve ser idêntica a FUNNEL_STAGE_ORDER em server/db.ts
 export const STAGE_ORDER = [
-  "new_lead", "first_contact", "meeting_scheduled", "proposal_sent",
-  "trial", "contract_sent", "contract_signed", "payment_pending",
-  "payment_done", "onboarding", "photo_visit_scheduled", "photo_visit_done",
-  "published", "announced", "feedback", "active_client",
+  "new_lead",
+  "first_contact",
+  "meeting_scheduled",
+  "proposal_sent",
+  "trial",
+  "contract_sent",
+  "contract_signed",
+  "payment_pending",
+  "payment_done",
+  "onboarding",
+  "photo_visit_scheduled",
+  "photo_visit_done",
+  "published",
+  "announced",
+  "feedback",
+  "active_client",
 ];
 
 // ─── Segment Labels ───────────────────────────────────────────────────────────

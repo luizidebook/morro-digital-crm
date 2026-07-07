@@ -1,7 +1,7 @@
 import CRMLayout from "@/components/CRMLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
 import { formatCurrency, formatDate } from "@/lib/crm";
-import { Copy, ExternalLink, FileText, Loader2, MessageSquare, Plus, Sparkles } from "lucide-react";
+import { AlertCircle, Copy, ExternalLink, FileText, Loader2, MessageSquare, Plus, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { useLocation, useSearch } from "wouter";
 import { toast } from "sonner";
@@ -47,6 +47,14 @@ export default function Proposals() {
     onError: (e) => toast.error(e.message),
   });
 
+  const sendProposal = trpc.proposals.send.useMutation({
+    onSuccess: () => {
+      toast.success("Proposta marcada como enviada!");
+      utils.proposals.list.invalidate();
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
   const generateMessage = trpc.llm.generateProposalMessage.useMutation({
     onSuccess: (data) => { setGeneratedMsg(data.message); setGenerating(false); },
     onError: (e) => { toast.error("Erro ao gerar mensagem: " + e.message); setGenerating(false); },
@@ -74,16 +82,44 @@ export default function Proposals() {
     });
   };
 
-  const getStatusBadge = (status: string) => {
+  const copyPublicLink = (shareToken: string) => {
+    if (!shareToken) return toast.error("Token de compartilhamento não disponível");
+    navigator.clipboard.writeText(`${window.location.origin}/proposals/view/${shareToken}`);
+    toast.success("Link copiado!");
+  };
+
+  const openPublicLink = (shareToken: string) => {
+    if (!shareToken) return toast.error("Token de compartilhamento não disponível");
+    window.open(`/proposals/view/${shareToken}`, "_blank");
+  };
+
+  const isExpired = (proposal: any) =>
+    proposal.validUntil && new Date(proposal.validUntil) < new Date();
+
+  const getStatusBadge = (status: string, proposal: any) => {
+    // Exibir "Expirada" se a proposta ainda está como "sent" mas já passou da validade
+    const effectiveStatus = (status === "sent" || status === "draft") && isExpired(proposal) ? "expired" : status;
     const map: Record<string, string> = {
       draft: "bg-slate-800 text-slate-300 border-slate-700",
       sent: "bg-blue-950 text-blue-300 border-blue-800",
+      viewed: "bg-indigo-950 text-indigo-300 border-indigo-800",
       accepted: "bg-emerald-950 text-emerald-300 border-emerald-800",
       rejected: "bg-red-950 text-red-300 border-red-800",
       expired: "bg-zinc-900 text-zinc-400 border-zinc-700",
     };
-    const labels: Record<string, string> = { draft: "Rascunho", sent: "Enviada", accepted: "Aceita", rejected: "Recusada", expired: "Expirada" };
-    return <Badge className={`text-[10px] border px-2 py-0.5 ${map[status] || "bg-muted"}`}>{labels[status] || status}</Badge>;
+    const labels: Record<string, string> = {
+      draft: "Rascunho",
+      sent: "Enviada",
+      viewed: "Visualizada",
+      accepted: "Aceita",
+      rejected: "Recusada",
+      expired: "Expirada",
+    };
+    return (
+      <Badge className={`text-[10px] border px-2 py-0.5 ${map[effectiveStatus] || "bg-muted"}`}>
+        {labels[effectiveStatus] || effectiveStatus}
+      </Badge>
+    );
   };
 
   return (
@@ -100,16 +136,22 @@ export default function Proposals() {
         </div>
 
         {isLoading ? (
-          <div className="space-y-3">{[...Array(3)].map((_, i) => <div key={i} className="h-24 rounded-xl bg-card/50 border border-border/30 animate-pulse" />)}</div>
+          <div className="space-y-3">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="h-24 rounded-xl bg-card/50 border border-border/30 animate-pulse" />
+            ))}
+          </div>
         ) : proposals.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <FileText className="h-12 w-12 text-muted-foreground/30 mb-4" />
             <p className="text-muted-foreground font-medium">Nenhuma proposta criada</p>
-            <Button onClick={() => setShowForm(true)} className="mt-4 gap-2" size="sm"><Plus className="h-4 w-4" /> Criar Proposta</Button>
+            <Button onClick={() => setShowForm(true)} className="mt-4 gap-2" size="sm">
+              <Plus className="h-4 w-4" /> Criar Proposta
+            </Button>
           </div>
         ) : (
           <div className="space-y-3">
-            {proposals.map((proposal: any) => (
+            {(proposals as any[]).map((proposal) => (
               <Card key={proposal.id} className="border-border/40 bg-card/60 hover:border-primary/20 transition-all">
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between gap-4">
@@ -118,29 +160,57 @@ export default function Proposals() {
                         <FileText className="h-5 w-5 text-amber-400" />
                       </div>
                       <div>
-                        <p className="font-semibold text-sm">{proposal.planName}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">{formatDate(proposal.createdAt)}</p>
+                        <p className="font-semibold text-sm">{proposal.planName || proposal.title}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Criada em {formatDate(proposal.createdAt)}
+                          {proposal.validUntil && (
+                            <span className={`ml-2 ${isExpired(proposal) ? "text-zinc-500" : "text-amber-400/70"}`}>
+                              · válida até {formatDate(proposal.validUntil)}
+                            </span>
+                          )}
+                        </p>
                         <p className="text-sm font-bold text-amber-400 mt-1">{formatCurrency(proposal.monthlyValue)}/mês</p>
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-2">
-                      {getStatusBadge(proposal.status)}
+                      {getStatusBadge(proposal.status, proposal)}
                       <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/proposals/view/${proposal.token}`); toast.success("Link copiado!"); }}
-                          className="p-1.5 rounded-md hover:bg-accent text-muted-foreground transition-colors" title="Copiar link"
-                        >
-                          <Copy className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          onClick={() => window.open(`/proposals/view/${proposal.token}`, "_blank")}
-                          className="p-1.5 rounded-md hover:bg-accent text-muted-foreground transition-colors" title="Visualizar"
-                        >
-                          <ExternalLink className="h-3.5 w-3.5" />
-                        </button>
+                        {/* Botões de link público — usa shareToken (campo correto do backend) */}
+                        {proposal.shareToken ? (
+                          <>
+                            <button
+                              onClick={() => copyPublicLink(proposal.shareToken)}
+                              className="p-1.5 rounded-md hover:bg-accent text-muted-foreground transition-colors"
+                              title="Copiar link público"
+                            >
+                              <Copy className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              onClick={() => openPublicLink(proposal.shareToken)}
+                              className="p-1.5 rounded-md hover:bg-accent text-muted-foreground transition-colors"
+                              title="Visualizar proposta"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </button>
+                          </>
+                        ) : (
+                          <span className="p-1.5 text-muted-foreground/40" title="Link não disponível">
+                            <AlertCircle className="h-3.5 w-3.5" />
+                          </span>
+                        )}
+                        {proposal.status === "draft" && (
+                          <button
+                            onClick={() => sendProposal.mutate({ id: proposal.id, leadId: proposal.leadId })}
+                            className="text-xs text-blue-400 hover:text-blue-300 transition-colors px-1.5"
+                            title="Marcar como enviada"
+                          >
+                            Enviar
+                          </button>
+                        )}
                         <button
                           onClick={() => setLocation(`/leads/${proposal.leadId}`)}
                           className="p-1.5 rounded-md hover:bg-accent text-muted-foreground transition-colors text-xs"
+                          title="Ver lead"
                         >
                           Lead
                         </button>
@@ -166,52 +236,107 @@ export default function Proposals() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5 sm:col-span-2">
                 <Label>Lead / Empresa *</Label>
-                <Select value={form.leadId ? String(form.leadId) : ""} onValueChange={(v) => setForm({ ...form, leadId: parseInt(v) })}>
-                  <SelectTrigger className="bg-background/50"><SelectValue placeholder="Selecione o lead..." /></SelectTrigger>
-                  <SelectContent>{(leads as any[]).map((l) => <SelectItem key={l.id} value={String(l.id)}>{l.companyName}</SelectItem>)}</SelectContent>
+                <Select
+                  value={form.leadId ? String(form.leadId) : ""}
+                  onValueChange={(v) => setForm({ ...form, leadId: parseInt(v) })}
+                >
+                  <SelectTrigger className="bg-background/50">
+                    <SelectValue placeholder="Selecione o lead..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(leads as any[]).map((l) => (
+                      <SelectItem key={l.id} value={String(l.id)}>{l.companyName}</SelectItem>
+                    ))}
+                  </SelectContent>
                 </Select>
               </div>
               <div className="space-y-1.5">
                 <Label>Nome do Plano</Label>
-                <Input value={form.planName} onChange={(e) => setForm({ ...form, planName: e.target.value })} className="bg-background/50" />
+                <Input
+                  value={form.planName}
+                  onChange={(e) => setForm({ ...form, planName: e.target.value })}
+                  className="bg-background/50"
+                />
               </div>
               <div className="space-y-1.5">
                 <Label>Valor Mensal (R$) *</Label>
-                <Input value={form.monthlyValue} onChange={(e) => setForm({ ...form, monthlyValue: e.target.value })} placeholder="299.00" className="bg-background/50" />
+                <Input
+                  value={form.monthlyValue}
+                  onChange={(e) => setForm({ ...form, monthlyValue: e.target.value })}
+                  placeholder="299.00"
+                  className="bg-background/50"
+                />
               </div>
               <div className="space-y-1.5">
                 <Label>Taxa de Implantação (R$)</Label>
-                <Input value={form.setupFee} onChange={(e) => setForm({ ...form, setupFee: e.target.value })} placeholder="0.00" className="bg-background/50" />
+                <Input
+                  value={form.setupFee}
+                  onChange={(e) => setForm({ ...form, setupFee: e.target.value })}
+                  placeholder="0.00"
+                  className="bg-background/50"
+                />
               </div>
               <div className="space-y-1.5">
                 <Label>Válida até</Label>
-                <Input type="date" value={form.validUntil} onChange={(e) => setForm({ ...form, validUntil: e.target.value })} className="bg-background/50" />
+                <Input
+                  type="date"
+                  value={form.validUntil}
+                  onChange={(e) => setForm({ ...form, validUntil: e.target.value })}
+                  className="bg-background/50"
+                />
               </div>
             </div>
 
             <div className="space-y-1.5">
               <Label>Funcionalidades incluídas</Label>
-              <Textarea value={form.features} onChange={(e) => setForm({ ...form, features: e.target.value })} className="bg-background/50 min-h-28 text-sm" placeholder="Uma por linha..." />
+              <Textarea
+                value={form.features}
+                onChange={(e) => setForm({ ...form, features: e.target.value })}
+                className="bg-background/50 min-h-28 text-sm"
+                placeholder="Uma por linha..."
+              />
             </div>
 
             {/* AI Message Generator */}
             <div className="space-y-2 p-4 rounded-xl bg-primary/5 border border-primary/10">
               <div className="flex items-center justify-between">
-                <Label className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-primary" /> Mensagem Personalizada (IA)</Label>
-                <Button type="button" size="sm" variant="outline" onClick={handleGenerate} disabled={generating || !form.leadId} className="gap-2 h-7 text-xs border-primary/30 text-primary hover:bg-primary/10">
-                  {generating ? <><Loader2 className="h-3 w-3 animate-spin" /> Gerando...</> : <><Sparkles className="h-3 w-3" /> Gerar com IA</>}
+                <Label className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-primary" /> Mensagem Personalizada (IA)
+                </Label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={handleGenerate}
+                  disabled={generating || !form.leadId}
+                  className="gap-2 h-7 text-xs border-primary/30 text-primary hover:bg-primary/10"
+                >
+                  {generating ? (
+                    <><Loader2 className="h-3 w-3 animate-spin" /> Gerando...</>
+                  ) : (
+                    <><Sparkles className="h-3 w-3" /> Gerar com IA</>
+                  )}
                 </Button>
               </div>
               {generatedMsg ? (
                 <div className="relative">
-                  <Textarea value={generatedMsg} onChange={(e) => setGeneratedMsg(e.target.value)} className="bg-background/50 min-h-24 text-sm" />
-                  <button type="button" onClick={() => { navigator.clipboard.writeText(generatedMsg); toast.success("Copiado!"); }}
-                    className="absolute top-2 right-2 p-1.5 rounded-md bg-card/80 hover:bg-card text-muted-foreground transition-colors">
+                  <Textarea
+                    value={generatedMsg}
+                    onChange={(e) => setGeneratedMsg(e.target.value)}
+                    className="bg-background/50 min-h-24 text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => { navigator.clipboard.writeText(generatedMsg); toast.success("Copiado!"); }}
+                    className="absolute top-2 right-2 p-1.5 rounded-md bg-card/80 hover:bg-card text-muted-foreground transition-colors"
+                  >
                     <Copy className="h-3.5 w-3.5" />
                   </button>
                 </div>
               ) : (
-                <p className="text-xs text-muted-foreground">Selecione um lead e clique em "Gerar com IA" para criar uma mensagem personalizada para WhatsApp.</p>
+                <p className="text-xs text-muted-foreground">
+                  Selecione um lead e clique em "Gerar com IA" para criar uma mensagem personalizada para WhatsApp.
+                </p>
               )}
             </div>
 
